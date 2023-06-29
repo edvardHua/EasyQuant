@@ -8,7 +8,7 @@ import yfinance
 
 def obtain_us_stock_data(code, start_date, end_date):
     """
-    返回的 DataFrame 中，column name
+    返回的 DataFrame 中，column names
     Index(['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume'], dtype='object')
 
     :param code: str
@@ -30,6 +30,10 @@ def obtain_hk_stock_data():
 
 
 def obtain_cn_stock_data():
+    pass
+
+
+def obtain_crypto_data():
     pass
 
 

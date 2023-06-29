@@ -3,108 +3,26 @@
 # @Author : zihua.zeng
 # @File : test.py
 #
+# 测试 futu 的 api，结合 backtrader 进行交易
+#
+
+
+from futu import *
 
 import pandas as pd
-import backtrader as bt
 
-from data_source import obtain_us_stock_data
-from datetime import datetime
+quote_ctx = OpenQuoteContext(host='127.0.0.1', port=11111)  # 创建行情对象
+df = quote_ctx.get_market_snapshot('HK.00700')  # 获取港股 HK.00700 的快照数据
 
+# trd_ctx = OpenSecTradeContext(host='127.0.0.1', port=11111)  # 创建交易对象
+# print(trd_ctx.place_order(price=500.0, qty=100, code="HK.00700", trd_side=TrdSide.BUY, trd_env=TrdEnv.SIMULATE))  # 模拟交易，下单（如果是真实环境交易，在此之前需要先解锁交易密码）
+# trd_ctx.close()  # 关闭对象，防止连接条数用尽
 
-class MACDStrategy(bt.Strategy):
-    """
+# 获取港股 HK.00700 (腾讯) 的 2020-01-01 到 2020-06-25 的日 K 线数据
+stock = 'HK.00700'
+start_date = "2023-01-01"
+end_date = "2023-06-25"
+ret_code, prices, page_req_key = quote_ctx.request_history_kline("HK.00700", start=start_date, end=end_date)
 
-    """
-
-    def __init__(self):
-        self.dataclose = self.datas[0].close
-        self.macd = bt.indicators.MACD(self.dataclose)
-        self.macdhist = bt.indicators.MACDHisto(self.dataclose)
-
-        # 跟踪订单，同一时间只有一个订单
-        self.order = None
-        self.buyprice = None
-        self.buycomm = None
-
-    def log(self, txt, dt=None):
-        dt = dt or self.datas[0].datetime.date(0)
-        print(f"{dt.isoformat()}, {txt}")
-
-    def next(self):
-        self.log(f"Close, {self.dataclose[0]}")
-
-        if self.order:
-            return  # 如果有订单，就不执行下面的操作
-
-        if not self.position:
-
-            if (self.dataclose[-1] - self.dataclose[0]) > 5:
-                self.log('BUY CREATE, %.2f' % self.dataclose[0])
-                # Keep track of the created order to avoid a 2nd order
-                self.order = self.buy()
-        else:
-            if len(self) >= (
-                    self.bar_executed + 2):  # 这里注意，Len(self)返回的是当前执行的bar数量，每次next会加1.而Self.bar_executed记录的最后一次交易执行时的bar位置。
-                # SELL, SELL, SELL!!! (with all possible default parameters)
-                self.log('SELL CREATE, %.2f' % self.dataclose[0])
-
-                # Keep track of the created order to avoid a 2nd order
-                self.order = self.sell()
-
-    def notify_order(self, order):
-
-        if order.status in [order.Submitted, order.Accepted]:
-            return
-
-        if order.status in [order.Completed]:
-            if order.isbuy():
-                self.log(
-                    'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
-                    (order.executed.price,
-                     order.executed.value,
-                     order.executed.comm))
-
-                self.buyprice = order.executed.price
-                self.buycomm = order.executed.comm
-            elif order.issell():
-                self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
-                         (order.executed.price,
-                          order.executed.value,
-                          order.executed.comm))
-
-            self.bar_executed = len(self)
-
-        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
-            self.log('Order Canceled/Margin/Rejected')
-
-        self.order = None
-
-    def notify_trade(self, trade):
-        if not trade.isclosed:
-            return
-
-        self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' %
-                 (trade.pnl, trade.pnlcomm))
-
-
-if __name__ == '__main__':
-    cerebo = bt.Cerebro()
-    # cerebo.addstrategy(TestStrategy, exitbars=5)
-    cerebo.addstrategy(MACDStrategy)
-
-    data_df = obtain_us_stock_data("NIO", "2017-06-01", "2023-06-28")
-    print(data_df.shape)
-    start_date = datetime(2017, 6, 1)
-    end_date = datetime(2023, 6, 28)
-
-    data = bt.feeds.PandasData(dataname=data_df, fromdate=start_date, todate=end_date)
-    cerebo.adddata(data)
-
-    # 设置初始资金
-    cerebo.broker.setcash(10000)
-    # 设置手续费
-    cerebo.broker.setcommission(0.001)
-
-    print("Current = ", cerebo.broker.get_value())
-    cerebo.run()
-    print("Final = ", cerebo.broker.get_value())
+quote_ctx.close()  # 关闭对象，防止连接条数用尽
+prices.to_csv("assets/hk700_snapshot.csv", index=False)
