@@ -44,6 +44,7 @@ def analyze_price_changes(df, window_size=7):
         
         price_changes.append({
             'Current_Index': i,
+            'Date': current_date,
             'Past_Index': i - (window_size - 1),
             'Current_Date': current_date,
             'Past_Date': past_date,
@@ -56,7 +57,7 @@ def analyze_price_changes(df, window_size=7):
     result_df = pd.DataFrame(price_changes)
     
     # # 保存结果到CSV
-    # result_df.to_csv('price_changes_analysis.csv', index=False)
+    result_df.to_csv('price_changes_analysis.csv', index=False)
     
     # # 找出最大跌幅和最大涨幅
     # max_drop = result_df['Percent_Change'].min()
@@ -68,6 +69,54 @@ def analyze_price_changes(df, window_size=7):
     # print(f"最大涨幅: {max_rise:.2f}%")
     
     return result_df
+
+
+
+def calculate_lower_and_upper_threshold(df, cutoff_date='2025-03-01', back_period_day=30, percentile=0.1, is_value_threshold=False):
+    """
+    计算给定日期前一段时间内的股价涨跌幅的下限和上限阈值（10%和90%分位点，或最大最小值之间的10%和90%）
+    
+    参数:
+    df (pd.DataFrame): 包含股票数据的DataFrame
+    start_date (str): 起始日期，格式为'YYYY-MM-DD'
+    back_period_day (int): 向前查找的天数
+    
+    返回:
+    tuple: (lower_threshold, upper_threshold) 分别是10%和90%分位点的涨跌幅
+    """
+    cutoff_date = pd.to_datetime(cutoff_date)
+    
+    # 计算开始日期
+    end_date = cutoff_date
+    start_date = pd.to_datetime(end_date - pd.Timedelta(days=back_period_day))
+    df['Date'] = pd.to_datetime(df['Date'])
+
+    # 筛选指定日期范围内的数据
+    if 'Date' in df.columns:
+        # 如果Date是列
+        mask = (df['Date'] >= start_date) & (df['Date'] <= end_date)
+        period_df = df[mask].copy()
+    else:
+        # 如果Date是索引
+        mask = (df.index >= start_date) & (df.index <= end_date)
+        period_df = df[mask].copy()
+    
+    # 计算每日涨跌幅
+    period_df = period_df.dropna()
+    hist_values = sorted(period_df['Percent_Change'].values)
+    
+    if is_value_threshold:
+        min_value = min(hist_values)
+        max_value = max(hist_values)
+        lower_threshold = min_value + (max_value - min_value) * percentile
+        upper_threshold = min_value + (max_value - min_value) * (1 - percentile)
+    else:
+        lower_threshold = hist_values[int(len(hist_values) * percentile)]
+        upper_threshold = hist_values[int(len(hist_values) * (1 - percentile))]
+    
+    return lower_threshold, upper_threshold
+
+
 
 
 def predict_price_rise_or_drop(df, window_size=7, next_n_days=1):
@@ -112,11 +161,20 @@ def predict_price_rise_or_drop(df, window_size=7, next_n_days=1):
         # 对历史涨跌幅进行排序
         sorted_hist = sorted(hist_values)
         
+        lower_threshold_index = int(len(hist_values) * 0.1)
+        upper_threshold_index = int(len(hist_values) * 0.9)
+        
+        # 根据索引划分
+        lower_threshold = sorted_hist[lower_threshold_index]
+        upper_threshold = sorted_hist[upper_threshold_index]
+        
+        # 根据值域划分
+        # lower_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.1
+        # upper_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.9
+        
+        
         # 计算前10%和后10%的阈值
         if len(sorted_hist) >= 10:  # 确保有足够的数据点
-            
-            lower_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.1
-            upper_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.9
             
             # 计算落在前10%和后10%的数据点数量
             lower_10_percent = sum(1 for x in hist_values if x <= lower_threshold)
@@ -141,8 +199,8 @@ def predict_price_rise_or_drop(df, window_size=7, next_n_days=1):
         # 确定是否当前涨跌幅在前10%或后10%的范围内
         is_in_extreme_range = False
         if len(sorted_hist) >= 10:
-            lower_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.1
-            upper_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.9
+            # lower_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.1
+            # upper_threshold = hist_values.min() + (hist_values.max() - hist_values.min()) * 0.9
             
             # 检查当前涨跌幅是否在极端范围内（前10%或后10%）
             if current_percent_change <= lower_threshold or current_percent_change >= upper_threshold:
@@ -198,7 +256,7 @@ def predict_price_rise_or_drop(df, window_size=7, next_n_days=1):
             actual_direction = 'Unknown'
             is_correct = None
             
-            # 排除掉前window_size行数据，只有在极端范围内才计算准确率
+            # 排除掉前window_size行数据
             if current_index + 1 < len(df) and current_index >= window_size:
                 next_day_price = df.iloc[current_index + 1]['Close']
                 current_price = df.iloc[current_index]['Close']
@@ -249,15 +307,20 @@ def predict_price_rise_or_drop(df, window_size=7, next_n_days=1):
 # 执行分析
 if __name__ == "__main__":
     # 每年的预测精度都会有差别，需要根据实际情况调整
+    # TODO: 需要有参数，用于计算参考的历史数据
     df = load_data_with_date_range(file_path='TLT_2005-01-01_2025-02-21_1d.csv', 
-                                   start_date='2024-01-01', 
-                                   end_date='2025-03-03')
+                                   start_date='2005-01-01', 
+                                   end_date='2025-02-21')
     # analyze_price_changes(df, window_size=3)
     # analyze_price_changes(df, window_size=5)
     # analyze_price_changes(df, window_size=7)
     # analyze_price_changes(df, window_size=14)
-    df, acc = predict_price_rise_or_drop(df, window_size=3, next_n_days=2)
-    df.to_csv('predictions.csv', index=False)
+    # df, acc = predict_price_rise_or_drop(df, window_size=3, next_n_days=2)
+    # df.to_csv('predictions.csv', index=False)
+    
+    price_changes_df = analyze_price_changes(df, window_size=3)
+    lower_threshold, upper_threshold = calculate_lower_and_upper_threshold(price_changes_df, cutoff_date='2025-02-21', back_period_day=30, percentile=0.1, is_value_threshold=True)
+    print(f"lower_threshold: {lower_threshold:.2f}, upper_threshold: {upper_threshold:.2f}")
     
 
 
