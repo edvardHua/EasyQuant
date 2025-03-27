@@ -1,0 +1,5 @@
+{
+    "python.defaultInterpreterPath": "/Users/bigo/anaconda3/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.condaPath": "/Users/bigo/anaconda3/bin/conda"
+} 

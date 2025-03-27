@@ -4,7 +4,7 @@ from datetime import datetime
 import argparse
 import matplotlib.pyplot as plt
 
-def get_us_stock_history(symbol, start_date, end_date, interval='1d', save_path=None, plot=True):
+def get_us_stock_history(symbol, start_date, end_date, interval='1d', save_path=None, save_csv=False, plot=False):
     """
     获取美股历史K线数据，保存为CSV并绘制走势图
     
@@ -44,8 +44,9 @@ def get_us_stock_history(symbol, start_date, end_date, interval='1d', save_path=
             save_path = f"{symbol}_{start_date}_{end_date}_{interval}.csv"
         
         # 保存为CSV文件
-        df.to_csv(save_path, index=False)
-        print(f"数据已保存到: {save_path}")
+        if save_csv:
+            df.to_csv(save_path, index=False)
+            print(f"数据已保存到: {save_path}")
         
         # 如果plot为True，才绘制和保存走势图
         if plot:
